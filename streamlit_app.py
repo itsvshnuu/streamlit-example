@@ -1,38 +1,58 @@
-from collections import namedtuple
-import altair as alt
-import math
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import numpy as np
+from prophet import Prophet
+from prophet.diagnostics import performance_metrics
+from prophet.diagnostics import cross_validation
+from prophet.plot import plot_cross_validation_metric
+import base64
 
-"""
-# Welcome to Streamlit!
+st.title('📈 Automated Time Series Forecasting')
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
+df = st.file_uploader('example_wp_log_peyton_manning.csv', type='csv')
 
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
-
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+st.info()
 
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+if df is not None:
+    data = pd.read_csv(df)
+    data['ds'] = pd.to_datetime(data['ds'],errors='coerce') 
+    
+    st.write(data)
+    
+    max_date = data['ds'].max()
+    #st.write(max_date)
+    
+    
+periods_input = st.number_input('How many periods would you like to forecast into the future?',
+min_value = 1, max_value = 365)
 
-    Point = namedtuple('Point', 'x y')
-    data = []
+if df is not None:
+    m = Prophet()
+    m.fit(data)
+    
+if df is not None:
+    future = m.make_future_dataframe(periods=periods_input)
+    
+    forecast = m.predict(future)
+    fcst = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
 
-    points_per_turn = total_points / num_turns
-
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
-
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+    fcst_filtered =  fcst[fcst['ds'] > max_date]    
+    st.write(fcst_filtered)
+    
+    """
+    The next visual shows the actual (black dots) and predicted (blue line) values over time.
+    """
+    fig1 = m.plot(forecast)
+    st.write(fig1)
+    
+    if df is not None:
+    csv_exp = fcst_filtered.to_csv(index=False)
+    # When no file name is given, pandas returns the CSV as a string, nice.
+    b64 = base64.b64encode(csv_exp.encode()).decode()  # some strings <-> bytes conversions necessary here
+    href = f'<a href="data:file/csv;base64,{b64}">Download CSV File</a> (right-click and save as ** &lt;forecast_name&gt;.csv**)'
+    st.markdown(href, unsafe_allow_html=True)
+    
+    
+    
+    
